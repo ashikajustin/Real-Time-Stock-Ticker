@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live Stock Price Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body {
+    font-family: "Poppins", sans-serif;
+    background: linear-gradient(180deg, #fdfbfb, #ebedee);
+    margin: 0;
+    padding: 0;
+    text-align: center;
+    color: #333;
+  }
+  header {
+    background: linear-gradient(90deg, #a1c4fd, #c2e9fb);
+    color: white;
+    padding: 18px 0;
+    font-size: 1.8rem;
+    font-weight: 600;
+  }
+  .control-box { margin: 20px 0; }
+  input {
+    padding: 10px;
+    width: 220px;
+    border: 1.5px solid #a1c4fd;
+    border-radius: 10px;
+    font-size: 1rem;
+    outline: none;
+    transition: 0.3s;
+  }
+  input:focus {
+    border-color: #3a6ea5;
+    box-shadow: 0 0 8px rgba(58, 110, 165, 0.3);
+  }
+  button {
+    padding: 10px 14px;
+    border: none;
+    border-radius: 10px;
+    background: #a1c4fd;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.3s;
+    margin-left: 5px;
+  }
+  button:hover { background: #6ea8fe; transform: scale(1.05); }
+  .stock-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 25px; padding: 25px; }
+  .stock-card {
+    background: white; border-radius: 20px; padding: 20px;
+    width: 280px; box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    transition: 0.3s ease;
+  }
+  .symbol { font-size: 1.3rem; font-weight: 600; color: #3a6ea5; }
+  .price { font-size: 1.3rem; margin: 8px 0; font-weight: 600; }
+  .change.green { color: #4CAF50; }
+  .change.red { color: #e53935; }
+  canvas { margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>📈 Live Stock Price Simulator</header>
+
+<div class="control-box">
+  <input id="symbolInput" placeholder="Enter Stock Symbol (e.g., AAPL)" />
+  <button onclick="addSymbol()">Add Stock</button>
+</div>
+
+<div class="stock-list" id="stockList"></div>
+
+<script>
+const backendURL = "http://localhost:3000";
+let symbols = ["AAPL", "TSLA", "MSFT"];
+let priceHistory = {};
+
+async function fetchStock(symbol) {
+  try {
+    const res = await fetch(`${backendURL}/price/${symbol}`);
+    if (!res.ok) throw new Error("Fetch failed");
+    const data = await res.json();
+    return {
+      symbol: data.symbol,
+      price: data.price,
+      change: data.change,
+      percent: data.percent
+    };
+  } catch (err) {
+    console.error("Fetch error:", err);
+    return null;
+  }
+}
+
+
+async function updateStocks() {
+  const list = document.getElementById("stockList");
+  list.innerHTML = "";
+
+  for (let sym of symbols) {
+    const s = await fetchStock(sym);
+    if (!s) continue;
+
+    if (!priceHistory[sym]) priceHistory[sym] = [];
+    priceHistory[sym].push(s.price);
+    if (priceHistory[sym].length > 10) priceHistory[sym].shift();
+
+    const colorClass = s.change >= 0 ? "green" : "red";
+    const arrow = s.change >= 0 ? "▲" : "▼";
+
+    const card = document.createElement("div");
+    card.className = "stock-card";
+    card.innerHTML = `
+      <div class="symbol">${s.symbol}</div>
+      <div class="price">$${s.price.toFixed(2)}</div>
+      <div class="change ${colorClass}">${arrow} ${s.percent}</div>
+      <canvas id="chart-${s.symbol}" width="250" height="120"></canvas>
+    `;
+    list.appendChild(card);
+
+    const ctx = document.getElementById(`chart-${s.symbol}`).getContext("2d");
+    new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: priceHistory[sym].map((_, i) => i + 1),
+        datasets: [{
+          label: "Price",
+          data: priceHistory[sym],
+          borderColor: s.change >= 0 ? "#4CAF50" : "#e53935",
+          fill: false,
+          tension: 0.3
+        }]
+      },
+      options: { plugins: { legend: { display: false } } }
+    });
+  }
+}
+
+function addSymbol() {
+  const input = document.getElementById("symbolInput");
+  const sym = input.value.trim().toUpperCase();
+  if (sym && !symbols.includes(sym)) symbols.push(sym);
+  input.value = "";
+  updateStocks();
+}
+
+updateStocks();
+setInterval(updateStocks, 60000); // refresh every 60s
+</script>
+</body>
+</html>
